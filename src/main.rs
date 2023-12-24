@@ -21,9 +21,12 @@ use std::{io::prelude::*, time::Duration};
 /// -h/--host - changes mpd host from default 127.0.0.1
 
 fn main() -> std::io::Result<()>{
+    // Default host and port
     let mut host = "127.0.0.1".to_string();
     let mut port = "6600".to_string();
     let mut args: Vec<String> = vec![];
+
+    // TODO: Set host and port if ENV variables are set
 
     // Parse inputs
     std::env::args().skip(1).for_each(|arg| {
@@ -60,6 +63,8 @@ fn main() -> std::io::Result<()>{
     };
     let arg_input = false;
 
+    let mut str_buff = String::new();
+    // Run user commands
     for arg in args {
         if arg_input {
             arg_function(arg)?;
@@ -69,8 +74,9 @@ fn main() -> std::io::Result<()>{
             "help" => {
                 todo!();
             },
-            "help" => {
-                todo!();
+            "toggle" => {
+                connection.write(b"pause\n")?;
+                let _ = connection.read_to_string(&mut str_buff);
             },
             "help" => {
                 todo!();
@@ -94,10 +100,7 @@ fn main() -> std::io::Result<()>{
                 println!("Invalid argument: {}", arg);
             }
         }
+        str_buff = "".to_string();
     }
-    connection.write(b"pause\n")?;
-    let mut str_buff = String::new();
-    let _ = connection.read_to_string(&mut str_buff);
-    print!("{}", str_buff);
     return Ok(());
 }
