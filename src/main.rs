@@ -1,7 +1,7 @@
 #[warn(clippy::pedantic)]
 
 use std::net;
-use std::io::prelude::*;
+use std::{io::prelude::*, time::Duration};
 
 /// Runs all given commands
 /// 
@@ -14,11 +14,12 @@ use std::io::prelude::*;
 /// toggle - Toggles mpd playback
 /// volume - changes mpd volume
 /// playlist - outputs mpd playlist with index numbers
-/// repeat/random/single/consume - toggles mpd 
+/// repeat/random/single/consume - toggles mpd state
 /// add - adds given files: seperated by comma
 ///
 /// -p/--port - changes mpd port from default 6600
 /// -h/--host - changes mpd host from default 127.0.0.1
+
 fn main() -> std::io::Result<()>{
     let mut host = "127.0.0.1".to_string();
     let mut port = "6600".to_string();
@@ -46,10 +47,57 @@ fn main() -> std::io::Result<()>{
     let mut connection = net::TcpStream::connect(
         format!("{}:{}", host, port)
     ).expect("Unable to connect to mpd server");
+    // NOTE: Connection buffer reading times out but the contents are still
+    //       read?
+    connection.set_read_timeout(Some(Duration::from_millis(50)))?;
 
-    connection.write_all(b"command_list_begin\nstatus\ncommand_list_end").unwrap();
-    connection.flush().unwrap();
-    let mut buff = Vec::new();
-    connection.read_to_end(&mut buff).unwrap();
+    type ArgAction = fn(String) -> Result<String, std::io::Error>;
+    let arg_function: ArgAction = |_: String| {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Option expected handler function none provided"
+        ));
+    };
+    let arg_input = false;
+
+    for arg in args {
+        if arg_input {
+            arg_function(arg)?;
+            continue;
+        }
+        match arg.as_str() {
+            "help" => {
+                todo!();
+            },
+            "help" => {
+                todo!();
+            },
+            "help" => {
+                todo!();
+            },
+            "help" => {
+                todo!();
+            },
+            "help" => {
+                todo!();
+            },
+            "help" => {
+                todo!();
+            },
+            "help" => {
+                todo!();
+            },
+            "help" => {
+                todo!();
+            },
+            _ => {
+                println!("Invalid argument: {}", arg);
+            }
+        }
+    }
+    connection.write(b"pause\n")?;
+    let mut str_buff = String::new();
+    let _ = connection.read_to_string(&mut str_buff);
+    print!("{}", str_buff);
     return Ok(());
 }
