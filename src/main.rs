@@ -1,7 +1,7 @@
 #[warn(clippy::pedantic)]
 
 use std::net;
-use std::{io::prelude::*, time::Duration};
+use std::{io::prelude::*, time::Duration, collections::HashMap};
 
 /// Runs all given commands
 /// 
@@ -78,22 +78,113 @@ fn main() -> std::io::Result<()>{
                 connection.write(b"pause\n")?;
                 let _ = connection.read_to_string(&mut str_buff);
             },
-            "help" => {
+            "discard" => {
+                // Query consume state
+                connection.write(b"status\n")?;
+                let _ = connection.read_to_string(&mut str_buff);
+                // Preform regex to get current consume state
+                let mut discard_command: &[u8] = &[];
+                for line in str_buff.lines() {
+                    if !line.starts_with("consume: ") {
+                        continue;
+                    }
+                    if line.contains("1") {
+                        discard_command = b"next\n";
+                    } else {
+                        // If not consuming add toggle before and after next command
+                        discard_command =
+                            b"command_list_begin\n\
+                            consume 1\n\
+                            next\n\
+                            consume 0\n\
+                            command_list_end\n\
+                            ";
+                    }
+                    break;
+                }
+                print!("{}", str_buff);
+                connection.write(discard_command)?;
+
+                let _ = connection.read_to_string(&mut str_buff);
+            },
+            "status" => {
+                // Info about mpd status
+                connection.write(b"status\n")?;
+                let _ = connection.read_to_string(&mut str_buff);
+                let mut items: HashMap<String, String> = HashMap::new();
+
+                // Parse return into key value pairs
+                str_buff.lines().for_each(|line| {
+                    let (key, value) = line.split_once(':').unzip();
+                    if let Some(key_value) = key {
+                        items.insert(
+                            key_value.to_string(),
+                            if let Some(value_value) = value {
+                                value_value.trim().to_string()
+                            } else {
+                                "".to_string()
+                            }
+                        );
+                    }
+                });
+                // Get info about current song
+                connection.write(
+                    format!("playlistid {}\n", items["songid"]).as_bytes()
+                )?;
+                let _ = connection.read_to_string(&mut str_buff);
+                
+                // Parse return into key value pairs again
+                str_buff.lines().for_each(|line| {
+                    let (key, value) = line.split_once(':').unzip();
+                    if let Some(key_value) = key {
+                        items.insert(
+                            key_value.to_string(),
+                            if let Some(value_value) = value {
+                                value_value.trim().to_string()
+                            } else {
+                                "".to_string()
+                            }
+                        );
+                    }
+                });
+
+                println!("{:?}", items);
+                // Output status
+                // println!(
+                //     "{}\n[{}] #{}/{}\n{}",
+                //     items["file"],
+                //     items["state"],
+                // );
+            },
+            "playlist" => {
+                connection.write(b"playlistinfo\n")?;
+                let _ = connection.read_to_string(&mut str_buff);
+                let mut index = 1;
+                str_buff.lines().for_each(|line| {
+                    if line.starts_with("file: ") {
+                        if let Some (value) = line.split_once(": ") {
+                            println!("{}: {}", index, value.1);
+                            index += 1;
+                        }
+                    }
+                });
+            },
+            "repeat" => {
                 todo!();
             },
-            "help" => {
+            "random" => {
                 todo!();
             },
-            "help" => {
+            "single" => {
                 todo!();
             },
-            "help" => {
+            "consume" => {
                 todo!();
             },
-            "help" => {
+            "volume" => {
                 todo!();
             },
-            "help" => {
+            "add" => {
                 todo!();
             },
             _ => {
