@@ -1,7 +1,7 @@
 #[warn(clippy::pedantic)]
 
 use std::net;
-use std::{io::prelude::*, time::Duration, collections::HashMap};
+use std::{io::prelude::*, time::Duration, collections::HashMap, net::TcpStream};
 
 /// Runs all given commands
 /// 
@@ -20,7 +20,7 @@ use std::{io::prelude::*, time::Duration, collections::HashMap};
 /// -p/--port - changes mpd port from default 6600
 /// -h/--host - changes mpd host from default 127.0.0.1
 
-fn main() -> std::io::Result<()>{
+fn main() -> Result<(), Box<dyn std::error::Error>>{
     // Default host and port
     let mut host = "127.0.0.1".to_string();
     let mut port = "6600".to_string();
@@ -54,20 +54,20 @@ fn main() -> std::io::Result<()>{
     //       read?
     connection.set_read_timeout(Some(Duration::from_millis(50)))?;
 
-    type ArgAction = fn(String) -> Result<String, std::io::Error>;
-    let arg_function: ArgAction = |_: String| {
-        return Err(std::io::Error::new(
+    type ArgAction = fn(String, &mut TcpStream) -> Result<String, Box<dyn std::error::Error>>;
+    let mut arg_function: ArgAction = |_: String, _: &mut TcpStream| {
+        return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "Option expected handler function none provided"
-        ));
+        )));
     };
-    let arg_input = false;
+    let mut arg_input = false;
 
     let mut str_buff = String::new();
     // Run user commands
     for arg in args {
         if arg_input {
-            arg_function(arg)?;
+            arg_function(arg, &mut connection)?;
             continue;
         }
         match arg.as_str() {
@@ -182,7 +182,8 @@ fn main() -> std::io::Result<()>{
                 todo!();
             },
             "volume" => {
-                todo!();
+                arg_input = true;
+                arg_function = volume;
             },
             "add" => {
                 todo!();
@@ -194,4 +195,30 @@ fn main() -> std::io::Result<()>{
         str_buff = "".to_string();
     }
     return Ok(());
+}
+
+fn volume(ammount: String, stream: &mut TcpStream) -> Result<String, Box<dyn std::error::Error>> {
+    if !(ammount.starts_with("+") || ammount.starts_with("-")) {
+        stream.write(format!("setvol {}\n", ammount).as_bytes())?;
+        let buff: &mut [u8] = &mut [];
+        let _ = stream.read(buff);
+    } else {
+        let change = ammount.parse::<i32>()?;
+        let mut current = "".to_string();
+        stream.write(b"getvol\n")?;
+        let _ = stream.read_to_string(&mut current);
+        let val = current.lines().skip(1).next()
+            .ok_or(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Unexpected data from mpd",
+            ))?
+            .split_once(": ").ok_or(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Unexpected data from mpd"
+            ))?
+            .1.parse::<i32>()?;
+        stream.write(format!("setvol {}\n", val + change).as_bytes())?;
+        let _ = stream.read_to_string(&mut current);
+    }
+    Ok("".to_string())
 }
