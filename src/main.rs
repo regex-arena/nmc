@@ -1,7 +1,9 @@
-#[warn(clippy::pedantic)]
 
-use std::net;
-use std::{io::prelude::*, time::Duration, collections::HashMap, net::TcpStream};
+use std::io::prelude::*;
+use std::io::{BufReader, BufWriter};
+use std::time::Duration;
+use std::collections::HashMap;
+use std::net::TcpStream;
 
 /// Runs all given commands
 /// 
@@ -19,6 +21,25 @@ use std::{io::prelude::*, time::Duration, collections::HashMap, net::TcpStream};
 ///
 /// -p/--port - changes mpd port from default 6600
 /// -h/--host - changes mpd host from default 127.0.0.1
+
+// Allows for defining methods for BufWriter struct\
+trait MPDRead {
+    fn read_mpd_end(&mut self, buffer: &mut String) -> Result<(), std::io::Error>;
+}
+impl MPDRead for BufReader<&TcpStream> {
+    /// Read mpd responses - only to use for queries that mpd returns extra info
+    /// on
+    fn read_mpd_end(&mut self, buffer: &mut String) -> Result<(), std::io::Error> {
+        loop {
+            let tmp_buffer = &mut String::new();
+            let _ = self.read_to_string(tmp_buffer);
+            buffer.push_str(tmp_buffer.as_str());
+            if tmp_buffer == "OK\n" {
+                return Ok(());
+            }
+        }
+    }
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>>{
     // Default host and port
@@ -47,15 +68,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
     });
 
     // Connect to mpd
-    let mut connection = net::TcpStream::connect(
+    let connection = TcpStream::connect(
         format!("{}:{}", host, port)
     ).expect("Unable to connect to mpd server");
     // NOTE: Connection buffer reading times out but the contents are still
     //       read?
     connection.set_read_timeout(Some(Duration::from_millis(50)))?;
+    let mut reader = BufReader::new(&connection);
+    let mut writer = BufWriter::new(&connection);
 
-    type ArgAction = fn(String, &mut TcpStream) -> Result<String, Box<dyn std::error::Error>>;
-    let mut arg_function: ArgAction = |_: String, _: &mut TcpStream| {
+    type ArgAction = fn (
+            String,
+            &mut BufReader<&TcpStream>,
+            &mut BufWriter<&TcpStream>
+        ) -> Result<String, Box<dyn std::error::Error>>;
+    let mut arg_function: ArgAction = |_: _, _: _, _: _| {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "Option expected handler function none provided"
@@ -67,7 +94,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
     // Run user commands
     for arg in args {
         if arg_input {
-            arg_function(arg, &mut connection)?;
+            arg_function(arg, &mut reader, &mut writer)?;
             continue;
         }
         match arg.as_str() {
@@ -75,13 +102,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
                 todo!();
             },
             "toggle" => {
-                connection.write(b"pause\n")?;
-                let _ = connection.read_to_string(&mut str_buff);
+                writer.write(b"pause\n")?;
+                reader.read_line(&mut str_buff).expect("not working");
             },
             "discard" => {
                 // Query consume state
-                connection.write(b"status\n")?;
-                let _ = connection.read_to_string(&mut str_buff);
+                writer.write(b"status\n")?;
+                let _ = reader.read_mpd_end(&mut str_buff);
                 // Preform regex to get current consume state
                 let mut discard_command: &[u8] = &[];
                 for line in str_buff.lines() {
@@ -102,15 +129,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
                     }
                     break;
                 }
-                print!("{}", str_buff);
-                connection.write(discard_command)?;
-
-                let _ = connection.read_to_string(&mut str_buff);
+                writer.write(discard_command)?;
+                let _ = reader.read_line(&mut str_buff);
             },
             "status" => {
                 // Info about mpd status
-                connection.write(b"status\n")?;
-                let _ = connection.read_to_string(&mut str_buff);
+                writer.write(b"status\n")?;
+                writer.flush()?;
+                let _ = reader.read_mpd_end(&mut str_buff);
                 let mut items: HashMap<String, String> = HashMap::new();
 
                 // Parse return into key value pairs
@@ -128,10 +154,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
                     }
                 });
                 // Get info about current song
-                connection.write(
+                writer.write(
                     format!("playlistid {}\n", items["songid"]).as_bytes()
                 )?;
-                let _ = connection.read_to_string(&mut str_buff);
+                writer.flush()?;
+                let _ = reader.read_mpd_end(&mut str_buff);
                 
                 // Parse return into key value pairs again
                 str_buff.lines().for_each(|line| {
@@ -157,8 +184,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
                 // );
             },
             "playlist" => {
-                connection.write(b"playlistinfo\n")?;
-                let _ = connection.read_to_string(&mut str_buff);
+                writer.write(b"playlistinfo\n")?;
+                let _ = reader.read_mpd_end(&mut str_buff);
                 let mut index = 1;
                 str_buff.lines().for_each(|line| {
                     if line.starts_with("file: ") {
@@ -170,16 +197,76 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
                 });
             },
             "repeat" => {
-                todo!();
+                let mut state = 0;
+                writer.write(b"status\n")?;
+                let _ = reader.read_to_string(&mut str_buff);
+                // Preform regex to get current consume state
+                for line in str_buff.lines() {
+                    if !line.starts_with("repeat: ") {
+                        continue;
+                    }
+                    // Switches the value for the currently set
+                    if line.contains("0") {
+                        state = 1;
+                    }
+                    break;
+                }
+                writer.write(format!("repeat {}\n", state).as_bytes())?;
+                let _ = reader.read_to_string(&mut str_buff);
             },
             "random" => {
-                todo!();
+                let mut state = 0;
+                writer.write(b"status\n")?;
+                let _ = reader.read_to_string(&mut str_buff);
+                // Preform regex to get current consume state
+                for line in str_buff.lines() {
+                    if !line.starts_with("random: ") {
+                        continue;
+                    }
+                    // Switches the value for the currently set
+                    if line.contains("0") {
+                        state = 1;
+                    }
+                    break;
+                }
+                writer.write(format!("random {}\n", state).as_bytes())?;
+                let _ = reader.read_to_string(&mut str_buff);
             },
             "single" => {
-                todo!();
+                let mut state = 0;
+                writer.write(b"status\n")?;
+                let _ = reader.read_to_string(&mut str_buff);
+                // Preform regex to get current consume state
+                for line in str_buff.lines() {
+                    if !line.starts_with("single: ") {
+                        continue;
+                    }
+                    // Switches the value for the currently set
+                    if line.contains("0") {
+                        state = 1;
+                    }
+                    break;
+                }
+                writer.write(format!("single {}\n", state).as_bytes())?;
+                let _ = reader.read_to_string(&mut str_buff);
             },
             "consume" => {
-                todo!();
+                let mut state = 0;
+                writer.write(b"status\n")?;
+                let _ = reader.read_to_string(&mut str_buff);
+                // Preform regex to get current consume state
+                for line in str_buff.lines() {
+                    if !line.starts_with("consume: ") {
+                        continue;
+                    }
+                    // Switches the value for the currently set
+                    if line.contains("0") {
+                        state = 1;
+                    }
+                    break;
+                }
+                writer.write(format!("consume {}\n", state).as_bytes())?;
+                let _ = reader.read_to_string(&mut str_buff);
             },
             "volume" => {
                 arg_input = true;
@@ -197,16 +284,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
     return Ok(());
 }
 
-fn volume(ammount: String, stream: &mut TcpStream) -> Result<String, Box<dyn std::error::Error>> {
+fn volume(
+    ammount: String,
+    reader: &mut BufReader<&TcpStream>,
+    writer: &mut BufWriter<&TcpStream>,
+) -> Result<String, Box<dyn std::error::Error>> {
     if !(ammount.starts_with("+") || ammount.starts_with("-")) {
-        stream.write(format!("setvol {}\n", ammount).as_bytes())?;
+        writer.write(format!("setvol {}\n", ammount).as_bytes())?;
         let buff: &mut [u8] = &mut [];
-        let _ = stream.read(buff);
+        let _ = reader.read(buff);
     } else {
         let change = ammount.parse::<i32>()?;
         let mut current = "".to_string();
-        stream.write(b"getvol\n")?;
-        let _ = stream.read_to_string(&mut current);
+        writer.write(b"getvol\n")?;
+        let _ = reader.read_to_string(&mut current);
         let val = current.lines().skip(1).next()
             .ok_or(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -217,8 +308,8 @@ fn volume(ammount: String, stream: &mut TcpStream) -> Result<String, Box<dyn std
                 "Unexpected data from mpd"
             ))?
             .1.parse::<i32>()?;
-        stream.write(format!("setvol {}\n", val + change).as_bytes())?;
-        let _ = stream.read_to_string(&mut current);
+        writer.write(format!("setvol {}\n", val + change).as_bytes())?;
+        let _ = reader.read_to_string(&mut current);
     }
     Ok("".to_string())
 }
