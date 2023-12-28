@@ -32,7 +32,7 @@ impl MPDRead for BufReader<&TcpStream> {
     fn read_mpd_end(&mut self, buffer: &mut String) -> Result<(), std::io::Error> {
         loop {
             let tmp_buffer = &mut String::new();
-            let _ = self.read_to_string(tmp_buffer);
+            self.read_line(tmp_buffer)?;
             buffer.push_str(tmp_buffer.as_str());
             if tmp_buffer == "OK\n" {
                 return Ok(());
@@ -71,8 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
     let connection = TcpStream::connect(
         format!("{}:{}", host, port)
     ).expect("Unable to connect to mpd server");
-    // NOTE: Connection buffer reading times out but the contents are still
-    //       read?
+    // NOTE: Connection buffer reading times out but the contents are still read?
     connection.set_read_timeout(Some(Duration::from_millis(50)))?;
     let mut reader = BufReader::new(&connection);
     let mut writer = BufWriter::new(&connection);
@@ -103,12 +102,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
             },
             "toggle" => {
                 writer.write(b"pause\n")?;
-                reader.read_line(&mut str_buff).expect("not working");
+                writer.flush()?;
+                
+                // Needed for command to be recognised?
+                reader.read_mpd_end(&mut str_buff)?;
             },
             "discard" => {
                 // Query consume state
                 writer.write(b"status\n")?;
-                let _ = reader.read_mpd_end(&mut str_buff);
+                writer.flush()?;
+                reader.read_mpd_end(&mut str_buff)?;
                 // Preform regex to get current consume state
                 let mut discard_command: &[u8] = &[];
                 for line in str_buff.lines() {
@@ -130,7 +133,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
                     break;
                 }
                 writer.write(discard_command)?;
-                let _ = reader.read_line(&mut str_buff);
+                writer.flush()?;
             },
             "status" => {
                 // Info about mpd status
@@ -185,7 +188,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
             },
             "playlist" => {
                 writer.write(b"playlistinfo\n")?;
-                let _ = reader.read_mpd_end(&mut str_buff);
+                writer.flush()?;
+                reader.read_mpd_end(&mut str_buff)?;
                 let mut index = 1;
                 str_buff.lines().for_each(|line| {
                     if line.starts_with("file: ") {
@@ -199,7 +203,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
             "repeat" => {
                 let mut state = 0;
                 writer.write(b"status\n")?;
-                let _ = reader.read_to_string(&mut str_buff);
+                writer.flush()?;
+                reader.read_mpd_end(&mut str_buff)?;
                 // Preform regex to get current consume state
                 for line in str_buff.lines() {
                     if !line.starts_with("repeat: ") {
@@ -212,12 +217,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
                     break;
                 }
                 writer.write(format!("repeat {}\n", state).as_bytes())?;
-                let _ = reader.read_to_string(&mut str_buff);
+                writer.flush()?;
             },
             "random" => {
                 let mut state = 0;
                 writer.write(b"status\n")?;
-                let _ = reader.read_to_string(&mut str_buff);
+                writer.flush()?;
+                reader.read_mpd_end(&mut str_buff)?;
                 // Preform regex to get current consume state
                 for line in str_buff.lines() {
                     if !line.starts_with("random: ") {
@@ -230,12 +236,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
                     break;
                 }
                 writer.write(format!("random {}\n", state).as_bytes())?;
-                let _ = reader.read_to_string(&mut str_buff);
+                writer.flush()?;
             },
             "single" => {
                 let mut state = 0;
                 writer.write(b"status\n")?;
-                let _ = reader.read_to_string(&mut str_buff);
+                writer.flush()?;
+                reader.read_mpd_end(&mut str_buff)?;
                 // Preform regex to get current consume state
                 for line in str_buff.lines() {
                     if !line.starts_with("single: ") {
@@ -248,12 +255,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
                     break;
                 }
                 writer.write(format!("single {}\n", state).as_bytes())?;
-                let _ = reader.read_to_string(&mut str_buff);
+                writer.flush()?;
             },
             "consume" => {
                 let mut state = 0;
                 writer.write(b"status\n")?;
-                let _ = reader.read_to_string(&mut str_buff);
+                writer.flush()?;
+                reader.read_mpd_end(&mut str_buff)?;
                 // Preform regex to get current consume state
                 for line in str_buff.lines() {
                     if !line.starts_with("consume: ") {
@@ -266,7 +274,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
                     break;
                 }
                 writer.write(format!("consume {}\n", state).as_bytes())?;
-                let _ = reader.read_to_string(&mut str_buff);
+                writer.flush()?;
             },
             "volume" => {
                 arg_input = true;
@@ -291,13 +299,16 @@ fn volume(
 ) -> Result<String, Box<dyn std::error::Error>> {
     if !(ammount.starts_with("+") || ammount.starts_with("-")) {
         writer.write(format!("setvol {}\n", ammount).as_bytes())?;
-        let buff: &mut [u8] = &mut [];
-        let _ = reader.read(buff);
+        writer.flush()?;
+        // At least one read call must be made for mpd to register writes
+        let mut ignore = "".to_string();
+        reader.read_mpd_end(&mut ignore)?;
     } else {
         let change = ammount.parse::<i32>()?;
         let mut current = "".to_string();
         writer.write(b"getvol\n")?;
-        let _ = reader.read_to_string(&mut current);
+        writer.flush()?;
+        reader.read_mpd_end(&mut current)?;
         let val = current.lines().skip(1).next()
             .ok_or(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -309,7 +320,7 @@ fn volume(
             ))?
             .1.parse::<i32>()?;
         writer.write(format!("setvol {}\n", val + change).as_bytes())?;
-        let _ = reader.read_to_string(&mut current);
+        writer.flush()?;
     }
     Ok("".to_string())
 }
