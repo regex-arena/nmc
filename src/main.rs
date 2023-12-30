@@ -1,4 +1,3 @@
-
 use std::io::prelude::*;
 use std::io::{BufReader, BufWriter};
 use std::time::Duration;
@@ -18,6 +17,7 @@ use std::net::TcpStream;
 /// playlist - outputs mpd playlist with index numbers
 /// repeat/random/single/consume - toggles mpd state
 /// add - adds given files: seperated by comma
+/// update - updates mpd database
 ///
 /// -p/--port - changes mpd port from default 6600
 /// -h/--host - changes mpd host from default 127.0.0.1
@@ -77,10 +77,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
     let mut writer = BufWriter::new(&connection);
 
     type ArgAction = fn (
-            String,
-            &mut BufReader<&TcpStream>,
-            &mut BufWriter<&TcpStream>
-        ) -> Result<String, Box<dyn std::error::Error>>;
+        String,
+        &mut BufReader<&TcpStream>,
+        &mut BufWriter<&TcpStream>
+    ) -> Result<(), Box<dyn std::error::Error>>;
     let mut arg_function: ArgAction = |_: _, _: _, _: _| {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -94,6 +94,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
     for arg in args {
         if arg_input {
             arg_function(arg, &mut reader, &mut writer)?;
+            arg_input = !arg_input;
             continue;
         }
         match arg.as_str() {
@@ -103,7 +104,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
             "toggle" => {
                 writer.write(b"pause\n")?;
                 writer.flush()?;
-                
+
                 // Needed for command to be recognised?
                 reader.read_mpd_end(&mut str_buff)?;
             },
@@ -124,11 +125,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
                         // If not consuming add toggle before and after next command
                         discard_command =
                             b"command_list_begin\n\
-                            consume 1\n\
-                            next\n\
-                            consume 0\n\
-                            command_list_end\n\
-                            ";
+                                consume 1\n\
+                                next\n\
+                                consume 0\n\
+                                command_list_end\n\
+                                ";
                     }
                     break;
                 }
@@ -162,7 +163,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
                 )?;
                 writer.flush()?;
                 let _ = reader.read_mpd_end(&mut str_buff);
-                
+
                 // Parse return into key value pairs again
                 str_buff.lines().for_each(|line| {
                     let (key, value) = line.split_once(':').unzip();
@@ -276,16 +277,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
                 writer.write(format!("consume {}\n", state).as_bytes())?;
                 writer.flush()?;
             },
+            "update" => {
+                writer.write(b"update\n")?;
+                writer.flush()?;
+                // Required at least once for mpd to register input
+                reader.read_mpd_end(&mut str_buff)?;
+            },
             "volume" => {
                 arg_input = true;
                 arg_function = volume;
             },
             "add" => {
-                todo!();
+                arg_input = true;
+                arg_function = add;
+            },
+            "remove" => {
+                arg_input = true;
+                arg_function = remove;
             },
             _ => {
                 println!("Invalid argument: {}", arg);
-            }
+            },
         }
         str_buff = "".to_string();
     }
@@ -296,7 +308,7 @@ fn volume(
     ammount: String,
     reader: &mut BufReader<&TcpStream>,
     writer: &mut BufWriter<&TcpStream>,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error>> {
     if !(ammount.starts_with("+") || ammount.starts_with("-")) {
         writer.write(format!("setvol {}\n", ammount).as_bytes())?;
         writer.flush()?;
@@ -322,5 +334,47 @@ fn volume(
         writer.write(format!("setvol {}\n", val + change).as_bytes())?;
         writer.flush()?;
     }
-    Ok("".to_string())
+    Ok(())
+}
+
+
+fn add(
+    files: String,
+    reader: &mut BufReader<&TcpStream>,
+    writer: &mut BufWriter<&TcpStream>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for file in files.split(',') {
+        let mut str_buff = String::new();
+        writer.write(
+            format!("searchadd \"(file == \\\"{}\\\")\"\n", file).as_bytes()
+        )?;
+        writer.flush()?;
+        // Required at least once for mpd to register input
+        reader.read_mpd_end(&mut str_buff)?;
+    }
+    Ok(())
+}
+
+fn remove(
+    targets: String,
+    reader: &mut BufReader<&TcpStream>,
+    writer: &mut BufWriter<&TcpStream>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut indecies = targets
+        .split(',')
+        .map(|x| x.parse::<usize>())
+        .filter(|x| x.is_ok())
+        .map(|x| x.unwrap() - 1)
+        .collect::<Vec<usize>>();
+    indecies.sort();
+    for (adjust, index) in indecies.into_iter().enumerate() {
+        let mut str_buff = String::new();
+        writer.write(
+            format!("delete {}\n", index - adjust).as_bytes()
+        )?;
+        writer.flush()?;
+        // Required at least once for mpd to register input
+        reader.read_mpd_end(&mut str_buff)?;
+    }
+    Ok(())
 }
