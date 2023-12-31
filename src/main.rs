@@ -7,17 +7,16 @@ use std::net::TcpStream;
 /// Runs all given commands
 /// 
 /// Possible arguments:
-///
-/// TODO
 /// help - Prints help screen
+/// toggle - Toggles mpd playback
 /// discard - removes curently playing song
 /// status - Same as no arguments: Prints mpd status screen
-/// toggle - Toggles mpd playback
-/// volume - changes mpd volume
 /// playlist - outputs mpd playlist with index numbers
 /// repeat/random/single/consume - toggles mpd state
-/// add - adds given files: seperated by comma
 /// update - updates mpd database
+/// volume - changes mpd volume
+/// add - adds given files: seperated by comma
+/// remove - removes items at given indecies
 ///
 /// -p/--port - changes mpd port from default 6600
 /// -h/--host - changes mpd host from default 127.0.0.1
@@ -43,8 +42,10 @@ impl MPDRead for BufReader<&TcpStream> {
 
 fn main() -> Result<(), Box<dyn std::error::Error>>{
     // Default host and port
-    let mut host = "127.0.0.1".to_string();
-    let mut port = "6600".to_string();
+    let mut host = std::env::var_os("MPD_HOST")
+        .unwrap_or("127.0.0.1".into()).to_str().unwrap_or("127.0.0.1").to_string();
+    let mut port = std::env::var_os("MPD_PORT")
+        .unwrap_or("6600".into()).to_str().unwrap_or("6600").to_string();
     let mut args: Vec<String> = vec![];
 
     // TODO: Set host and port if ENV variables are set
@@ -66,6 +67,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
         }
         args.push(arg);
     });
+    if args.len() == 0 {
+        args.push("status".to_string());
+    }
 
     // Connect to mpd
     let connection = TcpStream::connect(
@@ -99,7 +103,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
         }
         match arg.as_str() {
             "help" => {
-                todo!();
+                println!("Runs all given commands, from left to right");
+                println!("");
+                println!("Arguments:");
+                println!("-p/--port - changes mpd port from default 6600");
+                println!("-h/--host - changes mpd host from default 127.0.0.1");
+                println!("");
+                println!("Commands");
+                println!("help      - Prints help screen");
+                println!("toggle    - Toggles mpd playback");
+                println!("discard   - removes curently playing song");
+                println!("status    - Same as no arguments: Prints mpd status screen");
+                println!("playlist  - outputs mpd playlist with index numbers");
+                println!("repeat/random/single/consume - toggles mpd state");
+                println!("update    - updates mpd database");
+                println!("volume    - changes mpd volume");
+                println!("add       - adds given files from mpd music directiory");
+                println!("            seperate list of files with commas");
+                println!("remove    - removes items at given indecies");
+                println!("            seperate list of indecies with commas");
             },
             "toggle" => {
                 writer.write(b"pause\n")?;
@@ -179,13 +201,61 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
                     }
                 });
 
-                println!("{:?}", items);
+                let format_time = |t: &str| {
+                    let seconds = t
+                        .split_once('.').unwrap_or_else(|| ("0", "0"))
+                        .0.parse::<i32>().unwrap_or_else(|_| 0);
+                    // More then 1 hour
+                    if seconds > 60*60 {
+                        return format!("{}:{:02}:{:02}",
+                            seconds/3600,
+                            (seconds/60)%60,
+                            seconds%60,
+                        );
+                    }
+                    // ensures last digit is at least 2 characters
+                    return format!("{}:{:02}",
+                        seconds/60,
+                        seconds%60,
+                    );
+                };
                 // Output status
-                // println!(
-                //     "{}\n[{}] #{}/{}\n{}",
-                //     items["file"],
-                //     items["state"],
-                // );
+                println!(
+                    "{}\n\
+                    [{}] #{}/{} {}/{}\n\
+                    volume: {}%  repeat: {}  random: {}  single: {}  consume: {}",
+                    items["file"],
+                    if items["state"] == "pause" {
+                        "paused"
+                    } else {
+                        "playing"
+                    },
+                    items["Pos"].parse::<i32>()? + 1,
+                    items["playlistlength"],
+                    format_time(items["elapsed"].as_str()),
+                    format_time(items["duration"].as_str()),
+                    items["volume"],
+                    if items["repeat"] == "1" {
+                        "on"
+                    } else {
+                        "off"
+                    },
+                    if items["random"] == "1" {
+                        "on"
+                    } else {
+                        "off"
+                    },
+                    if items["single"] == "1" {
+                        "on"
+                    } else {
+                        "off"
+                    },
+                    if items["consume"] == "1" {
+                        "on"
+                    } else {
+                        "off"
+                    },
+                );
             },
             "playlist" => {
                 writer.write(b"playlistinfo\n")?;
