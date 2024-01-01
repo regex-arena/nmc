@@ -9,4 +9,7 @@ build:
 
 b: build
 
+run: build
+	./$(BIN)
 
+r: run
