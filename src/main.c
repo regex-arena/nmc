@@ -8,9 +8,47 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <sys/fcntl.h>
+#include <stdlib.h>
 
 #define DEFAULT_PORT htoni(6600)
 #define DEFAULT_IP INADDR_LOOPBACK
+
+void bwrite(int fd, const char* data) {
+    if (write(fd, data, strlen(data)) == -1) {
+        perror("Failed to write");
+        exit(errno);
+    }
+}
+
+void bread(int fd, char* data, int datalen) {
+    if (recv(fd, data, datalen, 0) == -1) {
+        perror("Failed to read");
+        exit(errno);
+    }
+}
+
+char* fullbread(int fd, char* data, int datalen) {
+    int offset = 0;
+    //for (;;) {
+        int result = read(fd, data + offset, datalen);
+        printf("%s\n", data);
+        // if (result == -1) {
+        //     perror("Failed to read");
+        //     exit(errno);
+        // } else if (result != datalen) {
+        //     int result = read(fd, data + result, datalen);
+        //     break;
+        // } else {
+        //     data = realloc(data, offset + datalen);
+        //     if (data == NULL) {
+        //         perror("Memory allocation failed");
+        //         exit(errno);
+        //     }
+        //     offset += datalen;
+        // }
+    //}
+    return data;
+}
 
 int main(int argc, char** argv) {
     char* host = getenv("MPD_HOST");
@@ -59,17 +97,10 @@ int main(int argc, char** argv) {
     // Itterates over given arguments looking for valid commands
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "toggle")) {
-            char* toggle = "pause\n";
-            if (send(connection, toggle, strlen(toggle) + 1, 0) == -1) {
-                perror("Failed to write");
-                return errno;
-            }
+            bwrite(connection, "pause\n");
             // Read reqired after every write
-            char* buffer = malloc(51*sizeof(char));
-            if (recv(connection, buffer, 50, 0) == -1) {
-                perror("Failed to read");
-                return errno;
-            }
+            char* buffer = malloc(101*sizeof(char));
+            bread(connection, buffer, 100);
             free(buffer);
         } else if (!strcmp(argv[i], "discard")) {
         } else if (!strcmp(argv[i], "status")) {
@@ -78,10 +109,21 @@ int main(int argc, char** argv) {
         } else if (!strcmp(argv[i], "random")) {
         } else if (!strcmp(argv[i], "single")) {
         } else if (!strcmp(argv[i], "consume")) {
+            bwrite(connection, "status\n");
+            char* buffer = malloc(101*sizeof(char));
+            buffer = fullbread(connection, buffer, 100);
+            free(buffer);
         } else if (!strcmp(argv[i], "update")) {
+            bwrite(connection, "update\n");
+            char* buffer = malloc(1001*sizeof(char));
+            bread(connection, buffer, 1000);
+            free(buffer);
         } else if (!strcmp(argv[i], "volume")) {
+            char *args = argv[++i];
         } else if (!strcmp(argv[i], "add")) {
+            char *args = argv[++i];
         } else if (!strcmp(argv[i], "remove")) {
+            char *args = argv[++i];
         } else if (!strcmp(argv[i], "help")) {
             printf("Runs all given commands, from left to right\n\n");
             printf("Arguments:\n");
