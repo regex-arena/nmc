@@ -11,9 +11,6 @@
 #include <sys/fcntl.h>
 #include <stdlib.h>
 
-#define DEFAULT_PORT htoni(6600)
-#define DEFAULT_IP INADDR_LOOPBACK
-
 void bwrite(int fd, const char* data) {
     if (write(fd, data, strlen(data)) == -1) {
         perror("Failed to write");
@@ -131,6 +128,10 @@ int main(int argc, char** argv) {
                 free(buffer);
             }
         } else if (!strcmp(argv[i], "status")) {
+            bwrite(connection, "status\n");
+            char* buffer = malloc(100*sizeof(char));
+            buffer = fullbread(connection, buffer, 100);
+            free(buffer);
         } else if (!strcmp(argv[i], "playlist")) {
             bwrite(connection, "playlistinfo\n");
             char* buffer = malloc(100*sizeof(char));
@@ -246,7 +247,15 @@ int main(int argc, char** argv) {
             bread(connection, buffer, 100);
             free(buffer);
         } else if (!strcmp(argv[i], "add")) {
-            // char *args = argv[++i];
+            for (char* args = strtok(argv[++i], ","); args != NULL; args = strtok(NULL, ",")) {
+                int length = strlen("searchadd \"(file == \\\"\\\")\"\n")
+                    + strlen(args)
+                    + 1;
+                char* command = malloc(length);
+                snprintf(command, length, "searchadd \"(file == \\\"%s\\\")\"\n", args);
+                bwrite(connection, command);
+                bread(connection, command, length);
+            }
         } else if (!strcmp(argv[i], "remove")) {
             char* args = strtok(argv[++i], ",");
             int len = 10;
