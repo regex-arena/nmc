@@ -8,8 +8,3 @@ build:
 	$(CC) $(CFLAGS) $(LFLAGS) $(MAIN) -o $(BIN)
 
 b: build
-
-run: build
-	./$(BIN)
-
-r: run

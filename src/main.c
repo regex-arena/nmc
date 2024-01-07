@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <stdio.h>
 #include <arpa/inet.h>
 #include <errno.h>
@@ -29,25 +30,28 @@ void bread(int fd, char* data, int datalen) {
 
 char* fullbread(int fd, char* data, int datalen) {
     int offset = 0;
-    //for (;;) {
-        int result = read(fd, data + offset, datalen);
-        printf("%s\n", data);
-        // if (result == -1) {
-        //     perror("Failed to read");
-        //     exit(errno);
-        // } else if (result != datalen) {
-        //     int result = read(fd, data + result, datalen);
-        //     break;
-        // } else {
-        //     data = realloc(data, offset + datalen);
-        //     if (data == NULL) {
-        //         perror("Memory allocation failed");
-        //         exit(errno);
-        //     }
-        //     offset += datalen;
-        // }
-    //}
+    int len = datalen;
+    while (strstr(data, "\nOK\n") == NULL) {
+        int result = read(fd, data + offset, len - offset);
+        if (result == -1) {
+            perror("Failed to read");
+            exit(errno);
+        }
+        if (offset + result >= len) {
+            len *= 2;
+            data = realloc(data, len);
+            if (data == NULL) {
+                perror("Memory allocation failed");
+                exit(errno);
+            }
+        }
+        offset += result;
+    }
     return data;
+}
+
+int compare(const void* a, const void* b) {
+    return (*(int*)b)-(*(int*)a);
 }
 
 int main(int argc, char** argv) {
@@ -93,7 +97,6 @@ int main(int argc, char** argv) {
         return errno;
     }
 
-
     // Itterates over given arguments looking for valid commands
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "toggle")) {
@@ -103,48 +106,191 @@ int main(int argc, char** argv) {
             bread(connection, buffer, 100);
             free(buffer);
         } else if (!strcmp(argv[i], "discard")) {
+            // Get discard state
+            bwrite(connection, "status\n");
+            char* buffer = malloc(100*sizeof(char));
+            buffer = fullbread(connection, buffer, 100);
+            char* val = strstr(buffer, "consume: ") + strlen("consume: ");
+            int state = atoi(val);
+            free(buffer);
+            if (state) {
+                bwrite(connection, "next\n");
+                char* buffer = malloc(100*sizeof(char));
+                bread(connection, buffer, 100);
+                free(buffer);
+            } else {
+                bwrite(connection,
+                       "command_list_begin\n"
+                       "consume 1\n"
+                       "next\n"
+                       "consume 0\n"
+                       "command_list_end\n"
+                       );
+                char* buffer = malloc(100*sizeof(char));
+                bread(connection, buffer, 100);
+                free(buffer);
+            }
         } else if (!strcmp(argv[i], "status")) {
         } else if (!strcmp(argv[i], "playlist")) {
-        } else if (!strcmp(argv[i], "repeat")) {
-        } else if (!strcmp(argv[i], "random")) {
-        } else if (!strcmp(argv[i], "single")) {
-        } else if (!strcmp(argv[i], "consume")) {
-            bwrite(connection, "status\n");
-            char* buffer = malloc(101*sizeof(char));
+            bwrite(connection, "playlistinfo\n");
+            char* buffer = malloc(100*sizeof(char));
             buffer = fullbread(connection, buffer, 100);
+
+            char* token = strstr(buffer, "file: ");
+            for (i = 1; token != NULL; i++) {
+                // Workaround as adding to NULL creates segfault
+                token += strlen("file: ");
+                printf("%d: ", i);
+                // Print to newline
+                for (int j = 0; token[j] != '\n'; j++) {
+                    putchar(token[j]);
+                }
+                putchar('\n');
+                token = strstr(token, "file: ");
+            }
+            free(buffer);
+        } else if (!strcmp(argv[i], "repeat")) {
+            // Get repeat state
+            bwrite(connection, "status\n");
+            char* buffer = malloc(100*sizeof(char));
+            buffer = fullbread(connection, buffer, 100);
+            char* val = strstr(buffer, "repeat: ") + strlen("repeat: ");
+            int state = atoi(val);
+            free(buffer);
+            // Toggle state
+            if (state) {
+                bwrite(connection, "repeat 0\n");
+            } else {
+                bwrite(connection, "repeat 1\n");
+            }
+            buffer = malloc(100*sizeof(char));
+            bread(connection, buffer, 100);
+            free(buffer);
+        } else if (!strcmp(argv[i], "random")) {
+            // Get random state
+            bwrite(connection, "status\n");
+            char* buffer = malloc(100*sizeof(char));
+            buffer = fullbread(connection, buffer, 100);
+            char* val = strstr(buffer, "random: ") + strlen("random: ");
+            int state = atoi(val);
+            free(buffer);
+            // Toggle state
+            if (state) {
+                bwrite(connection, "random 0\n");
+            } else {
+                bwrite(connection, "random 1\n");
+            }
+            buffer = malloc(100*sizeof(char));
+            bread(connection, buffer, 100);
+            free(buffer);
+        } else if (!strcmp(argv[i], "single")) {
+            // Get single state
+            bwrite(connection, "status\n");
+            char* buffer = malloc(100*sizeof(char));
+            buffer = fullbread(connection, buffer, 100);
+            char* val = strstr(buffer, "single: ") + strlen("single: ");
+            int state = atoi(val);
+            free(buffer);
+            // Toggle state
+            if (state) {
+                bwrite(connection, "single 0\n");
+            } else {
+                bwrite(connection, "single 1\n");
+            }
+            buffer = malloc(100*sizeof(char));
+            bread(connection, buffer, 100);
+            free(buffer);
+        } else if (!strcmp(argv[i], "consume")) {
+            // Get consume state
+            bwrite(connection, "status\n");
+            char* buffer = malloc(100*sizeof(char));
+            buffer = fullbread(connection, buffer, 100);
+            char* val = strstr(buffer, "consume: ") + strlen("consume: ");
+            int state = atoi(val);
+            free(buffer);
+            // Toggle state
+            if (state) {
+                bwrite(connection, "consume 0\n");
+            } else {
+                bwrite(connection, "consume 1\n");
+            }
+            buffer = malloc(100*sizeof(char));
+            bread(connection, buffer, 100);
             free(buffer);
         } else if (!strcmp(argv[i], "update")) {
+            // Get update state
             bwrite(connection, "update\n");
-            char* buffer = malloc(1001*sizeof(char));
-            bread(connection, buffer, 1000);
+            char* buffer = malloc(100*sizeof(char));
+            bread(connection, buffer, 100);
             free(buffer);
         } else if (!strcmp(argv[i], "volume")) {
-            char *args = argv[++i];
+            int ammount = atoi(argv[++i]);
+            if (!isdigit(argv[i][0])) {
+                bwrite(connection, "getvol\n");
+                char* buffer = malloc(100*sizeof(char));
+                buffer = fullbread(connection, buffer, 100);
+                char* val = strstr(buffer, "volume: ") + strlen("volume: ");
+                ammount += atoi(val);
+                free(buffer);
+            }
+            // Clamp ammount between 0 and 100
+            ammount = (ammount > 100) ? 100 : ammount;
+            ammount = (ammount < 0) ? 0 : ammount;
+
+            // Format strings
+            char * buf = malloc(strlen("setvol 100\n") +  1);
+            snprintf(buf, strlen("setvol 100\n") + 1, "setvol %d\n", ammount);
+
+            bwrite(connection, buf);
+            char* buffer = malloc(100*sizeof(char));
+            bread(connection, buffer, 100);
+            free(buffer);
         } else if (!strcmp(argv[i], "add")) {
-            char *args = argv[++i];
+            // char *args = argv[++i];
         } else if (!strcmp(argv[i], "remove")) {
-            char *args = argv[++i];
+            char* args = strtok(argv[++i], ",");
+            int len = 10;
+            int* index = malloc(len*sizeof(int));
+            int j;
+            for (j = 0; args != NULL; j++) {
+                if (j > len) {
+                    len *= 2;
+                    index = realloc(index, len*sizeof(int));
+                }
+                index[j] = atoi(args);
+                args = strtok(NULL, ",");
+            };
+            qsort(index, j, sizeof(int), &compare);
+            for (int i = 0; i < j; i++) {
+                int length = strlen("delete 100000\n")+1;
+                char* buf = malloc(length);
+                // Short cast used to not overflow buffer
+                snprintf(buf, length, "delete %d\n", (short)index[i]-1);
+                bwrite(connection, buf);
+                bread(connection, buf, length);
+                free(buf);
+            }
         } else if (!strcmp(argv[i], "help")) {
-            printf("Runs all given commands, from left to right\n\n");
-            printf("Arguments:\n");
-            printf("-p/--port - changes mpd port from default 6600\n");
-            printf("-h/--host - changes mpd host from default 127.0.0.1\n\n");
-            printf("Commands\n");
-            printf("help      - Prints help screen\n");
-            printf("toggle    - Toggles mpd playback\n");
-            printf("discard   - removes curently playing song\n");
-            printf("status    - Same as no arguments: Prints mpd status screen\n");
-            printf("playlist  - outputs mpd playlist with index numbers\n");
-            printf("repeat    - toggles mpd consume\n");
-            printf("random    - toggles mpd random\n");
-            printf("single    - toggles mpd single\n");
-            printf("consume   - toggles mpd consume\n");
-            printf("update    - updates mpd database\n");
-            printf("volume    - changes mpd volume\n");
-            printf("add       - adds given files from mpd music directiory\n");
-            printf("            seperate list of files with commas\n");
-            printf("remove    - removes items at given indecies\n");
-            printf("            seperate list of indecies with commas\n");
+            printf("Runs all given commands, from left to right\n\n"
+                   "Arguments:\n"
+                   "-p/--port - changes mpd port from default 6600\n"
+                   "-h/--host - changes mpd host from default 127.0.0.1\n\n"
+                   "Commands\n"
+                   "help      - Prints help screen\n"
+                   "toggle    - Toggles mpd playback\n"
+                   "discard   - removes curently playing song\n"
+                   "status    - Same as no arguments: Prints mpd status screen\n"
+                   "playlist  - outputs mpd playlist with index numbers\n"
+                   "repeat    - toggles mpd consume\n"
+                   "random    - toggles mpd random\n"
+                   "single    - toggles mpd single\n"
+                   "consume   - toggles mpd consume\n"
+                   "update    - updates mpd database\n"
+                   "volume    - changes mpd volume\n"
+                   "add       - adds given files from mpd music directiory\n"
+                   "            seperate list of files with commas\n"
+                   "remove    - removes items at given indecies\n"
+                   "            seperate list of indecies with commas\n");
         }
     }
     return 0;
