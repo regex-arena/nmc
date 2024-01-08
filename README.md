@@ -23,6 +23,7 @@ Basic commandline mpd client in multiple languages that runs all given commands
 
 ### Uncompleted
  - PHP
-   - [ ] Connect to server
-   - [ ] Allow user defined host and port
+   - [x] Connect to server
+   - [ ] Create user input form
    - [ ] Implementation of commands (0/13)
+   - [ ] Implement ability to run multiple commands simeltaniously
