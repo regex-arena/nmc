@@ -2,21 +2,27 @@
 Basic commandline mpd client in multiple languages that runs all given commands
 
 ## Command list
-help - Prints help screen
-toggle - Toggles mpd playback
-discard - removes curently playing song
-status - Same as no arguments: Prints mpd status screen
-playlist - outputs mpd playlist with index numbers
-repeat/random/single/consume - toggles mpd state
-update - updates mpd database
-volume - changes mpd volume
-add - adds given files: seperated by comma
-remove - removes items at given indecies
+ - help - Prints help screen
+ - toggle - Toggles mpd playback
+ - discard - removes curently playing song
+ - status - Same as no arguments: Prints mpd status screen
+ - playlist - outputs mpd playlist with index numbers
+ - repeat/random/single/consume - toggles mpd state
+ - update - updates mpd database
+ - volume - changes mpd volume
+ - add - adds given files: seperated by comma
+ - remove - removes items at given indecies
 
--p/--port - changes mpd port from default 6600
--h/--host - changes mpd host from default 127.0.0.1
+ - -p/--port - changes mpd port from default 6600
+ - -h/--host - changes mpd host from default 127.0.0.1
 
 ## Current languages
 ### Completed
-C
-Rust
+ - C
+ - Rust
+
+### Uncompleted
+ - PHP
+   - [ ] Connect to server
+   - [ ] Allow user defined host and port
+   - [ ] Implementation of commands (0/13)
