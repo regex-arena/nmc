@@ -129,9 +129,69 @@ int main(int argc, char** argv) {
             }
         } else if (!strcmp(argv[i], "status")) {
             bwrite(connection, "status\n");
-            char* buffer = malloc(100*sizeof(char));
-            buffer = fullbread(connection, buffer, 100);
-            free(buffer);
+            char* mpdinfo = malloc(100*sizeof(char));
+            mpdinfo = fullbread(connection, mpdinfo, 100);
+            int pos = atoi(strstr(mpdinfo, "songid: ") + strlen("songid:"));
+            // 10 allows for the insersing of numbers into string
+            char* command = malloc(10+strlen("playlistid \n"));
+            snprintf(command, 10+strlen("playlistid \n"), "playlistid %d\n", pos);
+            bwrite(connection, command);
+            free(command);
+            char* iteminfo = malloc(100);
+            iteminfo = fullbread(connection, iteminfo, 100);
+            for (char* i = strstr(iteminfo, "file: ") + strlen("file: "); *i != '\n'; i++) {
+                putchar(*i);
+            }
+            printf("\n[%s] #%d/%d ",
+                   (*(strstr(mpdinfo, "state: ") + strlen("state: p")) == 'l')
+                   ? "playing" : "paused",
+                   atoi(strstr(iteminfo, "Pos: ") + strlen("Pos: ")) + 1,
+                   atoi(strstr(mpdinfo, "playlistlength:") + strlen("playlistlength: "))
+                   );
+            int time = atoi(strstr(mpdinfo, "time: ") + strlen("time: "));
+            if (time > 60*60) {
+                printf("%d:%02d:%02d/",
+                       time/3600,
+                       (time/60)%60,
+                       time%60
+                       );
+            } else {
+                printf("%d:%02d/",
+                       time/60,
+                       time%60
+                       );
+            }
+            time = atoi(strstr(mpdinfo, "duration: ") + strlen("duration: "));
+            if (time > 60*60) {
+                printf("%d:%02d:%02d\n",
+                       time/3600,
+                       (time/60)%60,
+                       time%60
+                       );
+            } else {
+                printf("%d:%02d\n",
+                       time/60,
+                       time%60
+                       );
+            }
+            printf(
+                "volume: %d%% repeat: %s random: %s single: %s consume: %s\n",
+                atoi(strstr(mpdinfo, "volume:") + strlen("volume:")),
+                atoi(strstr(mpdinfo, "repeat:") + strlen("repeat:"))
+                    ? "on"
+                    : "off",
+                atoi(strstr(mpdinfo, "random:") + strlen("random:"))
+                    ? "on"
+                    : "off",
+                atoi(strstr(mpdinfo, "single:") + strlen("single:"))
+                    ? "on"
+                    : "off",
+                atoi(strstr(mpdinfo, "consume:") + strlen("consume:"))
+                    ? "on"
+                    : "off"
+            );
+            free(iteminfo);
+            free(mpdinfo);
         } else if (!strcmp(argv[i], "playlist")) {
             bwrite(connection, "playlistinfo\n");
             char* buffer = malloc(100*sizeof(char));
