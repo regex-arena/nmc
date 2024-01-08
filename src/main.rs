@@ -1,6 +1,5 @@
 use std::io::prelude::*;
 use std::io::{BufReader, BufWriter};
-use std::time::Duration;
 use std::collections::HashMap;
 use std::net::TcpStream;
 
@@ -75,8 +74,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
     let connection = TcpStream::connect(
         format!("{}:{}", host, port)
     ).expect("Unable to connect to mpd server");
-    // NOTE: Connection buffer reading times out but the contents are still read?
-    connection.set_read_timeout(Some(Duration::from_millis(50)))?;
     let mut reader = BufReader::new(&connection);
     let mut writer = BufWriter::new(&connection);
 
@@ -115,7 +112,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
                 println!("discard   - removes curently playing song");
                 println!("status    - Same as no arguments: Prints mpd status screen");
                 println!("playlist  - outputs mpd playlist with index numbers");
-                println!("repeat/random/single/consume - toggles mpd state");
+                println!("repeat    - toggles mpd consume");
+                println!("random    - toggles mpd random");
+                println!("single    - toggles mpd single");
+                println!("consume   - toggles mpd consume");
                 println!("update    - updates mpd database");
                 println!("volume    - changes mpd volume");
                 println!("add       - adds given files from mpd music directiory");
