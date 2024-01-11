@@ -36,45 +36,153 @@ if (isset($_POST['port'])) {
 if (isset($_POST)) {
     // IMPORTANT:
     // Verify ip and port
+    $fp = fsockopen($_POST['ip'], $_POST['port']);
     for ($i = 0; $i < (int)$_POST['commandcount']; $i++) {
         $command =  $_POST['command'.$i];
         switch ($command) {
         case "status":
+            fwrite($fp, "status\n");
+            $status = read_to_end($fp);
             break;
         case "toggle":
+            fwrite($fp, "pause\n");
+            read_to_end($fp);
             break;
         case "discard":
+            fwrite($fp, "status\n");
+            $status = read_to_end($fp);
+            $value = $status[strpos($status, "consume: ") + strlen("consume: ")];
+
+            echo $value;
+            if ($value === "0") {
+                fwrite($fp, "command_list_begin\n" .
+                "consume 1\n" .
+                "next\n" .
+                "consume 0\n" .
+                "command_list_end\n");
+            } else {
+                fwrite($fp, "next\n");
+            }
+            read_to_end($fp);
             break;
         case "playlist":
+            fwrite($fp, "playlistinfo\n");
+            $playlist = explode("file: ", read_to_end($fp));
+            $max = count($playlist);
+            for ($i = 1; $i < $max; $i++) {
+                echo $i . ". " .
+                    substr($playlist[$i], 0, strpos($playlist[$i], "\n")) .
+                    "<br>";
+            }
             break;
         case "repeat":
+            fwrite($fp, "status\n");
+            $status = read_to_end($fp);
+            $value = $status[strpos($status, "repeat: ") + strlen("repeat: ")];
+            if ($value === "0") {
+                fwrite($fp, "repeat 1\n");
+            } else {
+                fwrite($fp, "repeat 0\n");
+            }
+            read_to_end($fp);
             break;
         case "random":
+            fwrite($fp, "status\n");
+            $status = read_to_end($fp);
+            $value = $status[strpos($status, "random: ") + strlen("random: ")];
+            if ($value === "0") {
+                fwrite($fp, "random 1\n");
+            } else {
+                fwrite($fp, "random 0\n");
+            }
+            read_to_end($fp);
             break;
         case "single":
+            fwrite($fp, "status\n");
+            $status = read_to_end($fp);
+            $value = $status[strpos($status, "single: ") + strlen("single: ")];
+            if ($value === "0") {
+                fwrite($fp, "single 1\n");
+            } else {
+                fwrite($fp, "single 0\n");
+            }
+            read_to_end($fp);
             break;
         case "consume":
+            fwrite($fp, "status\n");
+            $status = read_to_end($fp);
+            $value = $status[strpos($status, "consume: ") + strlen("consume: ")];
+            if ($value === "0") {
+                fwrite($fp, "consume 1\n");
+            } else {
+                fwrite($fp, "consume 0\n");
+            }
+            read_to_end($fp);
             break;
         case "update":
+            fwrite($fp, "update\n");
+            read_to_end($fp);
             break;
         case "volume":
+            fwrite($fp, "status\n");
+            $status = read_to_end($fp);
+            $current = atoi(substr($status, strpos($status, "volume: ") + strlen("volume: ")));
+            $sign = $_POST["a".$i][0];
+            if ($sign === '-' || $sign === '+') {
+                $current += $_POST["a".$i];
+            } else {
+                $current = $_POST["a".$i];
+            }
+            $current = min(100, max(0, $current));
+            fwrite($fp, "setvol ".$current."\n");
+            read_to_end($fp);
             break;
         case "add":
+            $input = explode(",", $_POST["a".$i]);
+            $max = count($input);
+            for ($i = 0; $i < $max; $i++) {
+                fwrite($fp, "searchadd \"(file == \\\"".$input[$i]."\\\")\"\n");
+                read_to_end($fp);
+            }
             break;
         case "remove":
+            $input = explode(",", $_POST["a".$i]);
+            rsort($input, SORT_NUMERIC);
+            $max = count($input);
+            for ($i = 0; $i < $max; $i++) {
+                echo $input[$i];
+                fwrite($fp, "delete " . $input[$i] - 1 . "\n");
+                read_to_end($fp);
+            }
             break;
         default:
             echo "Invalid command<br>";
             break;
         }
     }
-    // $fp = fsockopen($_POST['ip'], $_POST['port']);
     // fwrite($fp, "status\n");
     // $value = "";
     // while (($val = fgets($fp)) !== "OK\n")  {
     //     $value .= $val;
     // }
     // echo $value;
+}
+
+function read_to_end($fp) {
+    $value = "";
+    while (($val = fgets($fp)) !== "OK\n")  {
+        $value .= $val;
+    }
+    return $value;
+}
+
+function atoi($str) {
+    $result = 0;
+    for ($i = 0; is_numeric($str[$i]); $i++) {
+        $result *= 10;
+        $result += $str[$i];
+    }
+    return $result;
 }
 ?>
 </body>

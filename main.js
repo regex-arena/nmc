@@ -28,6 +28,7 @@ function add_command() {
     var input = container.appendChild(document.createElement("input"));
     input.setAttribute("value", "");
     input.setAttribute("type", "hidden");
+    input.setAttribute("name", "a"+index);
     input.setAttribute("id", "a"+index);
 
 
@@ -60,7 +61,7 @@ function command_update(index) {
     var dropdown = document.getElementById("b"+index);
     var text_input = document.getElementById("a"+index);
     // Commands that need text input
-    var text_commands = ["add", "remove"];
+    var text_commands = ["add", "remove", "volume"];
     if (text_commands.includes(dropdown.value)) {
         text_input.setAttribute("type", "text");
         text_input.setAttribute("required", "true");
