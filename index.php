@@ -9,6 +9,7 @@
 <!-- Input form -->
 <h1>NMC</h1>
 <form method=POST>
+<input type="hidden" id=commandcount name=commandcount value=0></input>
 <div class="location">
 Control webpage for MPD server on
 <input id=ip value=<?php
@@ -25,7 +26,6 @@ if (isset($_POST['port'])) {
 }
 ?> id=port name=port></input>
 </div>
-<input type="hidden" id=commandcount value=0></input>
 <h3>Commands</h3> <button type=button onclick="add_command();">＋</button>
 <div id="commandlist">
 </div>
@@ -36,13 +36,45 @@ if (isset($_POST['port'])) {
 if (isset($_POST)) {
     // IMPORTANT:
     // Verify ip and port
-    $fp = fsockopen($_POST['ip'], $_POST['port']);
-    fwrite($fp, "status\n");
-    $value = "";
-    while (($val = fgets($fp)) !== "OK\n")  {
-        $value .= $val;
+    for ($i = 0; $i < (int)$_POST['commandcount']; $i++) {
+        $command =  $_POST['command'.$i];
+        switch ($command) {
+        case "status":
+            break;
+        case "toggle":
+            break;
+        case "discard":
+            break;
+        case "playlist":
+            break;
+        case "repeat":
+            break;
+        case "random":
+            break;
+        case "single":
+            break;
+        case "consume":
+            break;
+        case "update":
+            break;
+        case "volume":
+            break;
+        case "add":
+            break;
+        case "remove":
+            break;
+        default:
+            echo "Invalid command<br>";
+            break;
+        }
     }
-    echo $value;
+    // $fp = fsockopen($_POST['ip'], $_POST['port']);
+    // fwrite($fp, "status\n");
+    // $value = "";
+    // while (($val = fgets($fp)) !== "OK\n")  {
+    //     $value .= $val;
+    // }
+    // echo $value;
 }
 ?>
 </body>
