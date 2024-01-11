@@ -2,6 +2,7 @@
 <html>
 <head>
 <link rel="stylesheet" href="style.css">
+<script src="main.js"></script>
 <title>NMC</title>
 </head>
 <body>
@@ -24,7 +25,11 @@ if (isset($_POST['port'])) {
 }
 ?> id=port name=port></input>
 </div>
-<input type="submit" value="Send Request">
+<input type="hidden" id=commandcount value=0></input>
+<h3>Commands</h3> <button type=button onclick="add_command();">＋</button>
+<div id="commandlist">
+</div>
+<input type="submit" value="Execute">
 </form>
 <!-- Run commands -->
 <?php
