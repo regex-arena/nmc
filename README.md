@@ -26,5 +26,5 @@ Basic commandline mpd client in multiple languages that runs all given commands
    - [x] Connect to server
    - [x] Create user input form
    - [x] Allow for adding and removing command elements to form
-   - [ ] Implement apility to parse commands
+   - [x] Implement apility to parse commands
    - [ ] Implementation of commands (0/12)
