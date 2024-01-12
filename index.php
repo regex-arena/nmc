@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
 <head>
 <link rel="stylesheet" href="style.css">
@@ -43,6 +43,42 @@ if (isset($_POST)) {
         case "status":
             fwrite($fp, "status\n");
             $status = read_to_end($fp);
+            $location = atoi(substr($status, strpos($status, "songid: ") + strlen("songid: ")));
+            fwrite($fp, "playlistid ".$location."\n");
+            $playlist = read_to_end($fp);
+            $j = strpos($playlist, "file: ") + strlen("file: ");
+            while($playlist[$j] != "\n") {
+                echo $playlist[$j];
+                $j++;
+            }
+            if ($status[strpos($status, "state: ") + strlen("state: p")] == 'l') {
+                echo "<br>[playing] #";
+            } else {
+                echo "<br>[paused] #";
+            }
+            echo 1+atoi($playlist, strpos($playlist, "Pos: ") + strlen("Pos: ")) . "/" .
+                   atoi($status, strpos($status, "playlistlength: ") + strlen("playlistlength: "));
+            $time = atoi($status, strpos($status, "time: ") + strlen("time: "));
+            if ($time >= 3600) {
+                printf(" %d:%02d:%02d", intdiv($time, 3600), intdiv($time,60)%60, $time%60);
+            } else {
+                printf(" %d:%02d", intdiv($time,60), $time%60);
+            }
+            $time = atoi($status, strpos($status, "duration: ") + strlen("duration: "));
+            if ($time >= 3600) {
+                printf("/%d:%02d:%02d<br>", intdiv($time, 3600), intdiv($time,60)%60, $time%60);
+            } else {
+                printf("/%d:%02d<br>", intdiv($time,60), $time%60);
+            }
+            $stat = ["off", "on"];
+            printf(
+                "volume: %d%% repeat: %s random: %s single: %s consume: %s<br>",
+                atoi($status, strpos($status, "volume: ") + strlen("volume: ")),
+                $stat[$status[strpos($status, "repeat: ") + strlen("repeat: ")]],
+                $stat[$status[strpos($status, "random: ") + strlen("random: ")]],
+                $stat[$status[strpos($status, "single: ") + strlen("repeat: ")]],
+                $stat[$status[strpos($status, "consume: ") + strlen("consume: ")]]
+            );
             break;
         case "toggle":
             fwrite($fp, "pause\n");
@@ -176,9 +212,9 @@ function read_to_end($fp) {
     return $value;
 }
 
-function atoi($str) {
+function atoi($str, $index = 0) {
     $result = 0;
-    for ($i = 0; is_numeric($str[$i]); $i++) {
+    for ($i = $index; is_numeric($str[$i]); $i++) {
         $result *= 10;
         $result += $str[$i];
     }
